@@ -80,6 +80,25 @@ jobs:
           const text=(await preview.locator('body').innerText()).trim();
           console.log(JSON.stringify({stage,previewCharacters:text.length,previewStart:text.slice(0,200)}));
           if(!text || /Export a component|cannot find|unsupported/i.test(text))throw new Error('preview did not render sample');
+          if(!text.includes('Plumeria'))throw new Error('initial official sample missing');
+          const editedSource = [
+            "import * as css from '@plumeria/core';",
+            'const styles = css.create({',
+            "  testButton: { backgroundColor: '#6d28d9', color: '#ffffff', borderRadius: 12, paddingInline: 28, paddingBlock: 12 },",
+            '});',
+            'export default function App() {',
+            '  return <button sx={styles.testButton}>編集済み</button>;',
+            '}',
+          ].join('\n');
+          const editor=page.locator('.monaco-editor').first();
+          await editor.waitFor({timeout:30000});
+          await editor.click({position:{x:180,y:95}});
+          await page.keyboard.press('Control+A');
+          await page.keyboard.insertText(editedSource);
+          await preview.getByRole('button',{name:'編集済み'}).waitFor({timeout:60000});
+          const compiledColor=await preview.getByRole('button',{name:'編集済み'}).evaluate(element=>getComputedStyle(element).backgroundColor);
+          if(compiledColor!=='rgb(109, 40, 217)')throw new Error('compiled purple background incorrect: '+compiledColor);
+          console.log('OFFICIAL_PLAYGROUND_EDIT_EVIDENCE '+JSON.stringify({initialPreviewCharacters:text.length,changedButton:'編集済み',compiledColor,editedSourceChars:editedSource.length}));
           await page.screenshot({path:'plumeria-official-playground-smoke.png'});
           await browser.close();
           JS
