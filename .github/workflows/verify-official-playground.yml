@@ -1,0 +1,51 @@
+name: Verify official Playground source
+
+on:
+  push:
+    branches:
+      - verify-official-playground-20261121
+
+permissions:
+  contents: read
+
+jobs:
+  build-playground:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.3.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install exact workspace dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build Plumeria workspace packages
+        run: pnpm build
+      - name: Build original browser compilation engine and preview
+        run: pnpm --dir docs run prebuild
+      - name: Verify real build files and sizes
+        run: |
+          set -euo pipefail
+          test -s docs/public/playground/engine.mjs
+          test -s docs/public/playground/libs.json
+          test -s docs/public/playground/preview/boot.mjs
+          test -s docs/public/playground/preview/compiler.wasm32-wasi.wasm
+          node -e "const fs=require('fs');const files=['docs/public/playground/engine.mjs','docs/public/playground/libs.json','docs/public/playground/preview/boot.mjs','docs/public/playground/preview/compiler.wasm32-wasi.wasm'];console.log(JSON.stringify({status:'engine_built',commit:process.env.GITHUB_SHA,files:files.map(path=>({path,bytes:fs.statSync(path).size}))},null,2))"
+      - name: Build original documentation UI
+        run: pnpm --dir docs run build
+      - name: Verify complete Next.js production compilation
+        run: test -s docs/.next/BUILD_ID
+      - name: Upload actual official Playground build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plumeria-original-playground-build
+          path: |
+            docs/public/playground/
+            docs/.next/BUILD_ID
+          if-no-files-found: warn
+          retention-days: 2
