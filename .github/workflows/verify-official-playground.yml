@@ -54,14 +54,16 @@ jobs:
           test -d docs/dist/public
           find docs/dist/public -maxdepth 3 -type f -name "*playground*" -print -quit
           find docs/dist/public -maxdepth 3 -type f -name "index.html" -print -quit
-      - name: Install browser for real preview interaction
-        run: pnpm exec playwright install chromium --with-deps
+      - name: Verify Chrome from GitHub-hosted runner
+        run: |
+          command -v google-chrome
+          google-chrome --version
       - name: Smoke test editor and actual preview
         run: |
           (cd docs && PORT=4173 pnpm start >/tmp/plumeria-official-server.log 2>&1) &
           node --input-type=module <<'JS'
           import { chromium } from '@playwright/test';
-          const browser = await chromium.launch({headless:true});
+          const browser = await chromium.launch({headless:true,channel:'chrome',args:['--no-sandbox']});
           const page = await browser.newPage({viewport:{width:1280,height:850}});
           page.on('console',msg=>{if(msg.type()==='error') console.error('browser:',msg.text());});
           let loaded=false;
