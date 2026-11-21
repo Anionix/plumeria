@@ -54,6 +54,11 @@ jobs:
           test -d docs/dist/public
           find docs/dist/public -maxdepth 3 -type f -name "*playground*" -print -quit
           find docs/dist/public -maxdepth 3 -type f -name "index.html" -print -quit
+      - name: Mount the exact local Node-only adapter under the built site
+        run: |
+          mkdir -p docs/dist/public/adapter
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/Anionix/plumeria/cf803a293e9eff3d6487fe180ae1e98efdfbca47/verification/playground-adapter/index.html" -o docs/dist/public/adapter/index.html
+          echo "2b9aebe9de1b9f3dc6b2d2cb9d1c96ee4fa1945ef88312377097fdc565abf049  docs/dist/public/adapter/index.html" | sha256sum --check
       - name: Verify Chrome from GitHub-hosted runner
         run: |
           command -v google-chrome
@@ -100,6 +105,30 @@ jobs:
           if(compiledColor!=='rgb(109, 40, 217)')throw new Error('compiled purple background incorrect: '+compiledColor);
           console.log('OFFICIAL_PLAYGROUND_EDIT_EVIDENCE '+JSON.stringify({initialPreviewCharacters:text.length,changedButton:'編集済み',compiledColor,editedSourceChars:editedSource.length}));
           await page.screenshot({path:'plumeria-official-playground-smoke.png'});
+
+          const adapter=await browser.newPage({viewport:{width:1180,height:800}});
+          adapter.on('console',msg=>{if(msg.type()==='error')console.error('adapter-browser:',msg.text())});
+          const adapterResponse=await adapter.goto('http://127.0.0.1:4173/adapter',{waitUntil:'domcontentloaded',timeout:15000});
+          if(!adapterResponse?.ok())throw new Error('Node adapter page response failed');
+          await adapter.locator('#compile:not([disabled])').waitFor({timeout:60000});
+          const adapterPreview=adapter.frameLocator('iframe[title="Plumeriaプレビュー"]');
+          await adapterPreview.getByRole('button',{name:'追加する'}).waitFor({timeout:60000});
+          const firstColor=await adapterPreview.getByRole('button',{name:'追加する'}).evaluate(el=>getComputedStyle(el).backgroundColor);
+          if(firstColor!=='rgb(22, 101, 52)')throw new Error('Node adapter initial color incorrect: '+firstColor);
+          const adapterEdited=[
+            "import * as css from '@plumeria/core';",
+            "const styles = css.create({ addButton: { paddingInline: 28, paddingBlock: 12, color: '#ffffff', backgroundColor: '#6d28d9', borderRadius: 12 } });",
+            'export default function App(){return <button sx={styles.addButton}>保存する</button>;}',
+          ].join('\n');
+          await adapter.locator('#source').fill(adapterEdited);
+          await adapter.getByRole('button',{name:'コンパイルして表示'}).click();
+          await adapterPreview.getByRole('button',{name:'保存する'}).waitFor({timeout:60000});
+          const changedColor=await adapterPreview.getByRole('button',{name:'保存する'}).evaluate(el=>getComputedStyle(el).backgroundColor);
+          if(changedColor!=='rgb(109, 40, 217)')throw new Error('Node adapter edited CSS incorrect: '+changedColor);
+          await adapter.getByRole('button',{name:'初期化'}).click();
+          await adapterPreview.getByRole('button',{name:'追加する'}).waitFor({timeout:60000});
+          console.log('NODE_ADAPTER_EDIT_EVIDENCE '+JSON.stringify({firstColor,changedColor,labelAfterEdit:'保存する',resetLabel:'追加する'}));
+          await adapter.screenshot({path:'plumeria-adapter-edited.png'});
           await browser.close();
           JS
       - name: Upload official browser compiler and preview files
@@ -111,5 +140,6 @@ jobs:
             docs/public/playground/
             docs/dist/public/
             plumeria-official-playground-smoke.png
+            plumeria-adapter-edited.png
           if-no-files-found: warn
           retention-days: 2
