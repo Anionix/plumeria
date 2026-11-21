@@ -52,8 +52,8 @@ jobs:
         run: |
           set -euo pipefail
           test -d docs/dist/public
-          find docs/dist/public -maxdepth 3 -type f -name "*playground*" -print | head -20
-          find docs/dist/public -maxdepth 3 -type f -name "index.html" -print | head -20
+          find docs/dist/public -maxdepth 3 -type f -name "*playground*" -print -quit
+          find docs/dist/public -maxdepth 3 -type f -name "index.html" -print -quit
       - name: Install browser for real preview interaction
         run: pnpm exec playwright install chromium --with-deps
       - name: Smoke test editor and actual preview
@@ -88,7 +88,7 @@ jobs:
           name: plumeria-official-22-playground-build
           path: |
             docs/public/playground/
-            docs/dist/public/playground/
+            docs/dist/public/
             plumeria-official-playground-smoke.png
           if-no-files-found: warn
           retention-days: 2
