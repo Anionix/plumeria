@@ -57,7 +57,7 @@ jobs:
       - name: Mount the exact local Node-only adapter under the built site
         run: |
           mkdir -p docs/dist/public/adapter
-          curl -fsSL --retry 3 "https://raw.githubusercontent.com/Anionix/plumeria/cf803a293e9eff3d6487fe180ae1e98efdfbca47/verification/playground-adapter/index.html" -o docs/dist/public/adapter/index.html
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/Anionix/plumeria/verify-official-playground-20261121/verification/playground-adapter/index.html" -o docs/dist/public/adapter/index.html
           echo "2b9aebe9de1b9f3dc6b2d2cb9d1c96ee4fa1945ef88312377097fdc565abf049  docs/dist/public/adapter/index.html" | sha256sum --check
       - name: Verify Chrome from GitHub-hosted runner
         run: |
