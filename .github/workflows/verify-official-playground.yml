@@ -12,6 +12,8 @@ jobs:
   build-playground:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      PROD_URL: https://plumeria.dev
     steps:
       - name: Checkout pinned upstream official Plumeria
         uses: actions/checkout@v6
@@ -52,6 +54,33 @@ jobs:
           test -d docs/dist/public
           find docs/dist/public -maxdepth 3 -type f -name "*playground*" -print | head -20
           find docs/dist/public -maxdepth 3 -type f -name "index.html" -print | head -20
+      - name: Install browser for real preview interaction
+        run: pnpm exec playwright install chromium --with-deps
+      - name: Smoke test editor and actual preview
+        run: |
+          (cd docs && PORT=4173 pnpm start >/tmp/plumeria-official-server.log 2>&1) &
+          node --input-type=module <<'JS'
+          import { chromium } from '@playwright/test';
+          const browser = await chromium.launch({headless:true});
+          const page = await browser.newPage({viewport:{width:1280,height:850}});
+          page.on('console',msg=>{if(msg.type()==='error') console.error('browser:',msg.text());});
+          let loaded=false;
+          for (let attempt=0;attempt<30;attempt++){
+            try {const response=await page.goto('http://127.0.0.1:4173/playground',{waitUntil:'domcontentloaded',timeout:8000});if(response?.ok()){loaded=true;break;}}
+            catch{}
+            await page.waitForTimeout(1000);
+          }
+          if(!loaded) throw new Error('site cannot serve /playground');
+          await page.locator('[data-playground="stage"][data-ready="true"]').waitFor({timeout:120000});
+          const stage=await page.locator('[data-playground="stage"]').getAttribute('data-ready');
+          const preview=page.frameLocator('iframe[title="Preview"]');
+          await preview.locator('body').waitFor({timeout:20000});
+          const text=(await preview.locator('body').innerText()).trim();
+          console.log(JSON.stringify({stage,previewCharacters:text.length,previewStart:text.slice(0,200)}));
+          if(!text || /Export a component|cannot find|unsupported/i.test(text))throw new Error('preview did not render sample');
+          await page.screenshot({path:'plumeria-official-playground-smoke.png'});
+          await browser.close();
+          JS
       - name: Upload official browser compiler and preview files
         if: always()
         uses: actions/upload-artifact@v4
@@ -59,5 +88,7 @@ jobs:
           name: plumeria-official-22-playground-build
           path: |
             docs/public/playground/
+            docs/dist/public/playground/
+            plumeria-official-playground-smoke.png
           if-no-files-found: warn
           retention-days: 2
