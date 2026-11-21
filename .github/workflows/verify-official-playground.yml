@@ -13,7 +13,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout pinned upstream official Plumeria
+        uses: actions/checkout@v6
+        with:
+          repository: zss-labs/plumeria
+          ref: 70a0e7c23020ea1afb51999300471f50ece13c3f
+          persist-credentials: false
+      - name: Verify upstream commit identity
+        run: test "$(git rev-parse HEAD)" = "70a0e7c23020ea1afb51999300471f50ece13c3f"
       - uses: pnpm/action-setup@v6
         with:
           version: 11.3.0
@@ -21,31 +28,36 @@ jobs:
         with:
           node-version: "22"
           cache: pnpm
-      - name: Install exact workspace dependencies
+      - name: Install exact upstream workspace dependencies
         run: pnpm install --frozen-lockfile
       - name: Build Plumeria workspace packages
         run: pnpm build
       - name: Build original browser compilation engine and preview
         run: pnpm --dir docs run prebuild
-      - name: Verify real build files and sizes
+      - name: Verify original browser artifacts
         run: |
           set -euo pipefail
           test -s docs/public/playground/engine.mjs
           test -s docs/public/playground/libs.json
+          test -s docs/public/playground/migrate-worker.mjs
+          test -s docs/public/playground/migrate.wasm
           test -s docs/public/playground/preview/boot.mjs
           test -s docs/public/playground/preview/compiler.wasm32-wasi.wasm
-          node -e "const fs=require('fs');const files=['docs/public/playground/engine.mjs','docs/public/playground/libs.json','docs/public/playground/preview/boot.mjs','docs/public/playground/preview/compiler.wasm32-wasi.wasm'];console.log(JSON.stringify({status:'engine_built',commit:process.env.GITHUB_SHA,files:files.map(path=>({path,bytes:fs.statSync(path).size}))},null,2))"
-      - name: Build original documentation UI
+          node -e "const fs=require('fs');const files=['docs/public/playground/engine.mjs','docs/public/playground/libs.json','docs/public/playground/migrate.wasm','docs/public/playground/preview/compiler.wasm32-wasi.wasm'];console.log(JSON.stringify({status:'engine_built',source:'zss-labs/plumeria',upstream:'70a0e7c23020ea1afb51999300471f50ece13c3f',files:files.map(path=>({path,bytes:fs.statSync(path).size}))},null,2))"
+      - name: Build complete official website with Waku
         run: pnpm --dir docs run build
-      - name: Verify complete Next.js production compilation
-        run: test -s docs/.next/BUILD_ID
-      - name: Upload actual official Playground build
+      - name: Confirm produced static website
+        run: |
+          set -euo pipefail
+          test -d docs/dist/public
+          find docs/dist/public -maxdepth 3 -type f -name "*playground*" -print | head -20
+          find docs/dist/public -maxdepth 3 -type f -name "index.html" -print | head -20
+      - name: Upload official browser compiler and preview files
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: plumeria-original-playground-build
+          name: plumeria-official-22-playground-build
           path: |
             docs/public/playground/
-            docs/.next/BUILD_ID
           if-no-files-found: warn
           retention-days: 2
